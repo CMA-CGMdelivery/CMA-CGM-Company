@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CMA CGM Tracking Portal</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5; /* Light grey background */
+        }
+        .cma-cgm-blue-dark {
+            background-color: #003366; /* Dark blue from CMA CGM logo */
+        }
+        .cma-cgm-blue-light {
+            color: #0066CC; /* Lighter blue for accents */
+        }
+        .cma-cgm-red {
+            background-color: #CC0000; /* Red accent */
+        }
+        .progress-bar-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 9999px; /* Fully rounded */
+            overflow: hidden;
+            height: 20px; /* Increased height for better visibility of percentage */
+            position: relative; /* For absolute positioning of text */
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background-color: #0066CC; /* Lighter blue for fill */
+            width: 0%; /* Initial width */
+            border-radius: 9999px; /* Fully rounded */
+            transition: width 0.5s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end; /* Align text to the end of the fill */
+            padding-right: 8px; /* Padding for the percentage text */
+            box-sizing: border-box; /* Include padding in width calculation */
+        }
+        .progress-percentage {
+            color: white; /* Text color for percentage */
+            font-weight: bold;
+            font-size: 0.875rem; /* text-sm */
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3); /* Add shadow for readability */
+        }
+
+        /* Keyframes for subtle bounce/pulse animation */
+        @keyframes subtlePulse {
+            0% { transform: scale(1); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+            50% { transform: scale(1.005); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+            100% { transform: scale(1); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        }
+
+        .animate-pulse-subtle {
+            animation: subtlePulse 2s ease-in-out infinite;
+        }
+
+        /* Keyframes for loading spinner */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #0066CC; /* Blue */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        /* Print styles */
+        @media print {
+            body {
+                background-color: #fff;
+            }
+            header, main, .no-print {
+                display: none !important;
+            }
+            #trackingResults {
+                display: block !important;
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+                border-radius: 0;
+            }
+            .progress-bar-fill {
+                /* Ensure progress bar is visible in print */
+                background-color: #0066CC !important;
+                -webkit-print-color-adjust: exact; /* For exact color printing */
+                color-adjust: exact;
+            }
+            .progress-percentage {
+                color: white !important;
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+            }
+            /* Hide the LLM explanation button and container in print */
+            #explainStatusButton, #statusExplanation {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="min-h-screen flex flex-col items-center py-10 px-4">
+
+        <!-- Header -->
+        <header class="w-full max-w-4xl bg-white shadow-lg rounded-xl p-6 mb-8 flex items-center justify-center cma-cgm-blue-dark">
+            <!-- CMA CGM Logo (Simplified SVG) -->
+            <div class="flex items-center">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="mr-3">
+                    <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" fill="#0066CC" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round"/>
+                    <path d="M12 7.5L17 10L12 12.5L7 10L12 7.5Z" fill="#FFFFFF"/>
+                    <path d="M12 12.5L17 15L12 17.5L7 15L12 12.5Z" fill="#FFFFFF"/>
+                </svg>
+                <div class="text-white text-4xl font-extrabold tracking-tight">
+                    CMA CGM
+                </div>
+            </div>
+            <div class="ml-4 text-white text-xl font-medium hidden sm:block">
+                Tracking Portal
+            </div>
+        </header>
+
+        <!-- Tracking Input Section -->
+        <main class="w-full max-w-4xl bg-white shadow-lg rounded-xl p-8 mb-8 no-print">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6 text-center">Track Your Shipment</h2>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <input
+                    type="text"
+                    id="trackingCodeInput"
+                    placeholder="Enter Tracking Code (e.g., CMACGM123456789)"
+                    class="flex-grow w-full sm:w-auto p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                />
+                <button
+                    id="trackButton"
+                    class="w-full sm:w-auto px-6 py-3 cma-cgm-blue-dark text-white font-semibold rounded-lg shadow-md hover:opacity-90 transition duration-300 ease-in-out text-lg"
+                >
+                    Track Shipment
+                </button>
+            </div>
+            <p id="errorMessage" class="text-red-600 text-center mt-4 hidden">Invalid Tracking Code. Please try again.</p>
+
+            <!-- Loading Indicator -->
+            <div id="loadingIndicator" class="mt-8 flex flex-col items-center justify-center hidden">
+                <div class="loader"></div>
+                <p class="text-gray-600 mt-4 text-lg">Loading shipment details...</p>
+            </div>
+        </main>
+
+        <!-- Tracking Results Section (Initially Hidden) -->
+        <section id="trackingResults" class="w-full max-w-4xl bg-white shadow-lg rounded-xl p-8 hidden">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6 text-center">Shipment Details</h2>
+
+            <!-- Receiver Details -->
+            <div id="receiverDetails" class="mb-8 p-6 bg-blue-50 rounded-lg border border-blue-200">
+                <h3 class="text-xl font-medium text-gray-700 mb-4">Receiver Information</h3>
+                <table class="w-full text-left text-gray-600">
+                    <tbody>
+                        <tr>
+                            <td class="py-2 pr-4 font-semibold">Name:</td>
+                            <td class="py-2">Luz Orbilia Diosa Henao</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 pr-4 font-semibold">Email:</td>
+                            <td class="py-2">dluzorbilia@gmail.com</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 pr-4 font-semibold">Address:</td>
+                            <td class="py-2">Medellin 050001 Colombia</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 pr-4 font-semibold">Country:</td>
+                            <td class="py-2">Colombia</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Package Details -->
+            <div class="mb-8 p-6 bg-green-50 rounded-lg border border-green-200">
+                <h3 class="text-xl font-medium text-gray-700 mb-4">Package Information</h3>
+                <table class="w-full text-left text-gray-600">
+                    <tbody>
+                        <tr>
+                            <td class="py-2 pr-4 font-semibold">Tracking Code:</td>
+                            <td class="py-2" id="displayTrackingCode"></td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 pr-4 font-semibold">Weight:</td>
+                            <td class="py-2">10kg</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 pr-4 font-semibold">Destination:</td>
+                            <td class="py-2">Colombia</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 pr-4 font-semibold">Mode of Transportation:</td>
+                            <td class="py-2">Freight</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 pr-4 font-semibold">Estimated Delivery:</td>
+                            <td class="py-2">July 30, 2025</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="mb-8">
+                <h3 class="text-xl font-medium text-gray-700 mb-4 text-center">Shipment Progress</h3>
+                <div class="progress-bar-container">
+                    <div id="progressBarFill" class="progress-bar-fill">
+                        <span id="progressPercentage" class="progress-percentage">0%</span>
+                    </div>
+                </div>
+                <div class="flex justify-between text-sm text-gray-600 mt-2">
+                    <span>Origin</span>
+                    <span>In Transit</span>
+                    <span>Out for Delivery</span>
+                    <span>Delivered</span>
+                </div>
+                <!-- New button for LLM-powered status explanation -->
+                <button
+                    id="explainStatusButton"
+                    class="mt-6 w-full px-6 py-3 cma-cgm-blue-light text-white font-semibold rounded-lg shadow-md hover:opacity-90 transition duration-300 ease-in-out text-lg flex items-center justify-center no-print"
+                >
+                    ✨ Explain Current Status
+                </button>
+                <!-- Container for LLM explanation -->
+                <div id="statusExplanation" class="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-700 hidden no-print">
+                    <p class="font-semibold mb-2">Detailed Status Explanation:</p>
+                    <p id="explanationText" class="text-sm"></p>
+                    <div id="explanationLoading" class="text-center text-blue-500 mt-2 hidden">Loading explanation...</div>
+                </div>
+            </div>
+
+            <!-- Map Section -->
+            <div class="mb-8">
+                <h3 class="text-xl font-medium text-gray-700 mb-4 text-center">Route from El Dorado International Airport to Medellin</h3>
+                <div class="relative w-full h-96 bg-gray-200 rounded-lg overflow-hidden shadow-md flex items-center justify-center">
+                    <!-- Placeholder image for the map, as Google Maps API key is not available -->
+                    <img
+                        src="https://placehold.co/600x400/A0A0A0/FFFFFF?text=Map+Placeholder"
+                        alt="Map showing route from El Dorado International Airport to Medellin"
+                        class="w-full h-full object-cover"
+                    />
+                    <div class="absolute inset-0 flex items-center justify-center text-white text-xl font-bold bg-black bg-opacity-50">
+                        Map Display (Static Image)
+                    </div>
+                </div>
+                <div class="mt-4 text-center text-gray-700">
+                    <p class="font-semibold">Estimated Distance: ~420 km</p>
+                    <p class="font-semibold">Estimated Driving Time: ~8-10 hours</p>
+                    <p class="text-sm text-gray-500">(Please note: This is a driving estimate. Freight transportation time will vary. An interactive map requires an API key.)</p>
+                </div>
+            </div>
+
+            <!-- Print Button -->
+            <div class="text-center mt-8 no-print">
+                <button
+                    id="printButton"
+                    class="px-8 py-3 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 transition duration-300 ease-in-out text-lg flex items-center justify-center mx-auto"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6m-6-4v4m6-4v4m-5-9H4V5a2 2 0 012-2h12a2 2 0 012 2v4h-3m-6 0h.01" />
+                    </svg>
+                    Print Shipment Details
+                </button>
+            </div>
+
+            <!-- Thank You Message -->
+            <div class="text-center mt-10 p-6 bg-blue-100 rounded-lg shadow-inner">
+                <p class="text-3xl font-bold cma-cgm-blue-light">THANKS FOR USING CMA-CGM</p>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // The generated tracking code
+        const GENERATED_TRACKING_CODE = "CMACGM123456789";
+        const LOADING_DELAY = 2000; // 2 seconds delay
+
+        // Get DOM elements
+        const trackingCodeInput = document.getElementById('trackingCodeInput');
+        const trackButton = document.getElementById('trackButton');
+        const trackingResults = document.getElementById('trackingResults');
+        const errorMessage = document.getElementById('errorMessage');
+        const displayTrackingCode = document.getElementById('displayTrackingCode');
+        const progressBarFill = document.getElementById('progressBarFill');
+        const progressPercentage = document.getElementById('progressPercentage');
+        const explainStatusButton = document.getElementById('explainStatusButton');
+        const statusExplanation = document.getElementById('statusExplanation');
+        const explanationText = document.getElementById('explanationText');
+        const explanationLoading = document.getElementById('explanationLoading');
+        const printButton = document.getElementById('printButton');
+        const receiverDetails = document.getElementById('receiverDetails');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+
+        // Function to simulate progress bar animation and update percentage
+        function animateProgressBar() {
+            let width = 0;
+            const targetWidth = 90; // Simulate 90% completion for "Out for Delivery"
+            const duration = 1000; // 1 second animation
+            const startTime = performance.now();
+
+            function updateProgress(currentTime) {
+                const elapsedTime = currentTime - startTime;
+                const progress = Math.min(elapsedTime / duration, 1); // Clamp to 1
+                width = progress * targetWidth;
+
+                progressBarFill.style.width = width + '%';
+                progressPercentage.textContent = Math.round(width) + '%';
+
+                if (progress < 1) {
+                    requestAnimationFrame(updateProgress);
+                }
+            }
+            requestAnimationFrame(updateProgress);
+        }
+
+        // Function to determine current status based on progress bar width
+        function getCurrentStatus() {
+            const width = parseFloat(progressBarFill.style.width);
+            if (width < 30) return "Origin";
+            if (width < 60) return "In Transit";
+            if (width < 90) return "Out for Delivery";
+            return "Delivered";
+        }
+
+        // Function to call Gemini API for status explanation
+        async function getStatusExplanation(status) {
+            explanationText.textContent = '';
+            explanationLoading.classList.remove('hidden');
+            statusExplanation.classList.remove('hidden');
+
+            const prompt = `Provide a concise and helpful explanation for the package delivery status: "${status}". What does it mean for the customer and what are the typical next steps?`;
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { contents: chatHistory };
+            const apiKey = ""; // Canvas will inject the API key here at runtime
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    explanationText.textContent = text;
+                } else {
+                    explanationText.textContent = "Could not retrieve a detailed explanation at this time. Please try again later.";
+                    console.error("Gemini API response structure unexpected:", result);
+                }
+            } catch (error) {
+                explanationText.textContent = "Error fetching explanation. Please check your network connection or try again.";
+                console.error("Error calling Gemini API:", error);
+            } finally {
+                explanationLoading.classList.add('hidden');
+            }
+        }
+
+        // Event listener for the Track button
+        trackButton.addEventListener('click', () => {
+            const enteredCode = trackingCodeInput.value.trim();
+
+            // Hide previous messages/results
+            errorMessage.classList.add('hidden');
+            trackingResults.classList.add('hidden');
+            statusExplanation.classList.add('hidden');
+            explanationText.textContent = '';
+            receiverDetails.classList.remove('animate-pulse-subtle');
+
+            if (enteredCode === GENERATED_TRACKING_CODE) {
+                // Show loading indicator
+                loadingIndicator.classList.remove('hidden');
+
+                setTimeout(() => {
+                    // Hide loading indicator
+                    loadingIndicator.classList.add('hidden');
+                    // Display tracking results
+                    trackingResults.classList.remove('hidden');
+                    // Set the displayed tracking code
+                    displayTrackingCode.textContent = GENERATED_TRACKING_CODE;
+                    // Animate the progress bar
+                    animateProgressBar();
+                    // Add bouncing animation to receiver details
+                    receiverDetails.classList.add('animate-pulse-subtle');
+                }, LOADING_DELAY); // Delay before showing results
+            } else {
+                errorMessage.classList.remove('hidden');
+            }
+        });
+
+        // Event listener for the Explain Status button
+        explainStatusButton.addEventListener('click', () => {
+            const currentStatus = getCurrentStatus();
+            getStatusExplanation(currentStatus);
+        });
+
+        // Event listener for the Print button
+        printButton.addEventListener('click', () => {
+            window.print();
+        });
+
+        // Optional: Allow pressing Enter key to track
+        trackingCodeInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                trackButton.click();
+            }
+        });
+    </script>
+</body>
+</html>
